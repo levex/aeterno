@@ -3,4 +3,17 @@ name = "aeterno"
 version = "0.1.0"
 authors = ["Levente Kurusa <lkurusa@acm.org>"]
 
+[[bin]]
+name = "aeterno-init"
+path = "src/init.rs"
+
+[[bin]]
+name = "aeterno-sys"
+path = "src/sys.rs"
+
+[features]
+default = []
+local-testing = []
+
 [dependencies]
+nix = "0.11.0"
