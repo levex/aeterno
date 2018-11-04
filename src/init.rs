@@ -8,10 +8,12 @@
 extern crate nix;
 use nix::sys::socket::{AddressFamily, bind, SockAddr, SockFlag, SockType};
 use nix::sys::socket::{socket, UnixAddr};
+use std::os::unix::io::RawFd;
 
 use std::ffi::CString;
 
 const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
+const SYS_SOCKET_FD: RawFd = 4;
 
 #[cfg(feature = "native")]
 const AETERNO_SYS_PATH: &str = "/sbin/aeterno-sys";
@@ -22,7 +24,7 @@ const AETERNO_SYS_PATH: &str = "./target/debug/aeterno-sys";
 fn main() {
     /* Create the socket */
     let sock_fd = socket(AddressFamily::Unix,
-                        SockType::Datagram,
+                        SockType::Stream,
                         SockFlag::empty(),
                         None)
                 .expect("FATAL: unable to create socket\n");
@@ -34,7 +36,7 @@ fn main() {
                 .expect("FATAL: Failed to bind socket to address\n");
 
     /* Fix up fd 4 */
-    nix::unistd::dup2(sock_fd, 4)
+    nix::unistd::dup2(sock_fd, SYS_SOCKET_FD)
                 .expect("FATAL: Failed to dup2(2) the socket fd\n");
 
     /* Now that the socket has been created, start spawning aeterno-sys */
