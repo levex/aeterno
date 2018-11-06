@@ -19,6 +19,7 @@ extern crate env_logger;
 // const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
 const SYS_SOCKET_FD: RawFd = 4;
 const SYS_SOCKET_BACKLOG: usize = 5;
+const AETERNO_VERSION: &str = "Aeterno v0.0.1 - November 2018\n";
 
 use std::thread;
 
@@ -41,6 +42,11 @@ fn reply_query(conn_fd: RawFd, q: Query) {
     match q {
         Query::Helo => {
             info!("Received HELO from fd {:?}", conn_fd);
+            /*
+             * Write version string back to the connection,
+             * don't care if it fails
+             */
+            let _ = write(conn_fd, AETERNO_VERSION.as_bytes());
         },
         Query::ProtocolError => {
             info!("Protocol error with fd {:?}", conn_fd);
