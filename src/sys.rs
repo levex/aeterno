@@ -24,25 +24,25 @@ const AETERNO_VERSION: &str = "Aeterno v0.0.1 - November 2018\n";
 use std::thread;
 
 #[derive(Debug, PartialEq, Eq)]
-enum Query {
+enum RawQuery {
     Helo,
     Start(String),
     ProtocolError,
 }
 
-impl From<&str> for Query {
-    fn from(s: &str) -> Query {
+impl From<&str> for RawQuery {
+    fn from(s: &str) -> RawQuery {
         match s.split_whitespace().collect::<Vec<&str>>().as_slice() {
-            ["HELO"] => Query::Helo,
-            ["START", x] => Query::Start(x.to_string()),
-            _ => Query::ProtocolError,
+            ["HELO"] => RawQuery::Helo,
+            ["START", x] => RawQuery::Start(x.to_string()),
+            _ => RawQuery::ProtocolError,
         }
     }
 }
 
-fn reply_query(conn_fd: RawFd, q: Query) {
+fn reply_query(conn_fd: RawFd, q: RawQuery) {
     match q {
-        Query::Helo => {
+        RawQuery::Helo => {
             info!("Received HELO from fd {:?}", conn_fd);
             /*
              * Write version string back to the connection,
@@ -50,11 +50,11 @@ fn reply_query(conn_fd: RawFd, q: Query) {
              */
             let _ = write(conn_fd, AETERNO_VERSION.as_bytes());
         },
-        Query::Start(path_str) => {
+        RawQuery::Start(path_str) => {
             info!("Received START {:?} command from fd {:?}",
                   path_str, conn_fd);
         },
-        Query::ProtocolError => {
+        RawQuery::ProtocolError => {
             info!("Protocol error with fd {:?}", conn_fd);
         },
     }
@@ -73,7 +73,7 @@ fn handle_connection(conn_fd: RawFd) {
             .map(From::from)
             .unwrap_or_else(|err| {
                 debug!("{:?}", err);
-                Query::ProtocolError
+                RawQuery::ProtocolError
             });
 
         reply_query(conn_fd, query);
