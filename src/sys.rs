@@ -7,10 +7,11 @@
 
 use std::os::unix::io::RawFd;
 use std::str::from_utf8;
+use std::path::PathBuf;
 
 extern crate nix;
 use nix::sys::socket::{accept, listen, MsgFlags, recv};
-use nix::unistd::{close, write};
+use nix::unistd::{close, Pid, write};
 
 #[macro_use]
 extern crate log;
@@ -27,6 +28,15 @@ use std::thread;
 enum RawQuery {
     Helo,
     Start(String),
+    Stop(String),
+    ProtocolError,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Query {
+    Helo,
+    Start(PathBuf),
+    Stop(Pid),
     ProtocolError,
 }
 
@@ -35,14 +45,15 @@ impl From<&str> for RawQuery {
         match s.split_whitespace().collect::<Vec<&str>>().as_slice() {
             ["HELO"] => RawQuery::Helo,
             ["START", x] => RawQuery::Start(x.to_string()),
+            ["STOP", x] => RawQuery::Stop(x.to_string()),
             _ => RawQuery::ProtocolError,
         }
     }
 }
 
-fn reply_query(conn_fd: RawFd, q: RawQuery) {
+fn reply_query(conn_fd: RawFd, q: Query) {
     match q {
-        RawQuery::Helo => {
+        Query::Helo => {
             info!("Received HELO from fd {:?}", conn_fd);
             /*
              * Write version string back to the connection,
@@ -50,12 +61,45 @@ fn reply_query(conn_fd: RawFd, q: RawQuery) {
              */
             let _ = write(conn_fd, AETERNO_VERSION.as_bytes());
         },
-        RawQuery::Start(path_str) => {
+        Query::Start(path) => {
             info!("Received START {:?} command from fd {:?}",
-                  path_str, conn_fd);
+                  path, conn_fd);
         },
-        RawQuery::ProtocolError => {
+        Query::Stop(pid) => {
+            info!("Received STOP {:?} command from fd {:?}",
+                  pid, conn_fd);
+        },
+        Query::ProtocolError => {
             info!("Protocol error with fd {:?}", conn_fd);
+        },
+    }
+}
+
+/* TODO: convert this to a Result type */
+fn validate_raw_query(rq: RawQuery) -> Option<Query> {
+    match rq {
+        RawQuery::Helo => Some(Query::Helo),
+        RawQuery::ProtocolError => Some(Query::ProtocolError),
+        RawQuery::Start(path_str) => {
+            let mut p = PathBuf::new();
+            p.push(path_str);
+
+            /* Verify that the path is valid */
+            if p.exists() {
+                Some(Query::Start(p))
+            } else {
+                None
+            }
+        },
+        RawQuery::Stop(pid_str) => {
+            let pid = pid_str
+                .parse::<i32>()
+                .ok();
+            if let Some(p) = pid {
+                Some(Query::Stop(Pid::from_raw(p)))
+            } else {
+                None
+            }
         },
     }
 }
@@ -76,7 +120,12 @@ fn handle_connection(conn_fd: RawFd) {
                 RawQuery::ProtocolError
             });
 
-        reply_query(conn_fd, query);
+        if let Some(q) = validate_raw_query(query) {
+            reply_query(conn_fd, q);
+        } else {
+            /* TODO: forward the unix error */
+            let _ = write(conn_fd, "ERR -1\n".as_bytes());
+        }
     } else {
         debug!("Failed to receive from socket");
     }
