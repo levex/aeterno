@@ -26,13 +26,15 @@ use std::thread;
 #[derive(Debug, PartialEq, Eq)]
 enum Query {
     Helo,
+    Start(String),
     ProtocolError,
 }
 
 impl From<&str> for Query {
     fn from(s: &str) -> Query {
-        match s {
-            "HELO\n" => Query::Helo,
+        match s.split_whitespace().collect::<Vec<&str>>().as_slice() {
+            ["HELO"] => Query::Helo,
+            ["START", x] => Query::Start(x.to_string()),
             _ => Query::ProtocolError,
         }
     }
@@ -48,6 +50,10 @@ fn reply_query(conn_fd: RawFd, q: Query) {
              */
             let _ = write(conn_fd, AETERNO_VERSION.as_bytes());
         },
+        Query::Start(path_str) => {
+            info!("Received START {:?} command from fd {:?}",
+                  path_str, conn_fd);
+        },
         Query::ProtocolError => {
             info!("Protocol error with fd {:?}", conn_fd);
         },
@@ -60,6 +66,7 @@ fn handle_connection(conn_fd: RawFd) {
     let buf: &mut [u8] = &mut [0; 256];
     let size = recv(conn_fd, buf, MsgFlags::empty());
     if size.is_ok() {
+        /* The .unwrap() here is OK, since we check is_ok() before */
         debug!("Received {} bytes", size.unwrap());
         let query = from_utf8(&buf)
             .map(|str| { str.trim_matches(char::from(0)) })
