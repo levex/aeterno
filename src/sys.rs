@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 extern crate nix;
 use nix::sys::socket::{accept, listen, MsgFlags, recv};
+use nix::sys::signal::kill;
 use nix::unistd::{close, Pid, write};
 
 #[macro_use]
@@ -92,11 +93,18 @@ fn validate_raw_query(rq: RawQuery) -> Option<Query> {
             }
         },
         RawQuery::Stop(pid_str) => {
-            let pid = pid_str
+            let pid_i = pid_str
                 .parse::<i32>()
                 .ok();
-            if let Some(p) = pid {
-                Some(Query::Stop(Pid::from_raw(p)))
+            if let Some(p) = pid_i {
+                let pid = Pid::from_raw(p);
+
+                /* Verify that the PID is valid */
+                if kill(pid, None).is_ok() {
+                    Some(Query::Stop(pid))
+                } else {
+                    None
+                }
             } else {
                 None
             }
