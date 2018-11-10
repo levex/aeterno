@@ -15,7 +15,7 @@ use std::sync::Mutex;
 extern crate nix;
 use nix::sys::socket::{accept, listen, MsgFlags, recv};
 use nix::sys::signal::kill;
-use nix::sys::wait::waitpid;
+use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::{close, Pid, write};
 
 #[macro_use]
@@ -218,6 +218,18 @@ fn validate_raw_query(rq: RawQuery) -> Option<Query> {
     }
 }
 
+fn process_wait_event(wait: WaitStatus) {
+    let master_cell = master_fd.lock().unwrap();
+    let master = master_cell.borrow();
+
+    if master.is_none() {
+        warn!("wait event ({:?}) without master!", wait);
+    } else {
+        let master = master.unwrap();
+        let _ = write(master, format!("{:?}\n", wait).as_bytes());
+    }
+}
+
 fn handle_connection(conn_fd: RawFd) {
     debug!("Handling connection for FD {}", conn_fd);
 
@@ -299,7 +311,7 @@ fn main() {
         let res = waitpid(None, None);
         match res {
             Err(_) => (),
-            _ => debug!("wait res: {:?}", res),
+            Ok(wait) => process_wait_event(wait),
         }
     }
 }
