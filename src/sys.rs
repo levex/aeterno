@@ -6,8 +6,9 @@
  */
 
 use std::os::unix::io::RawFd;
-use std::str::from_utf8;
 use std::path::PathBuf;
+use std::process::Command;
+use std::str::from_utf8;
 
 extern crate nix;
 use nix::sys::socket::{accept, listen, MsgFlags, recv};
@@ -41,9 +42,25 @@ enum Query {
     ProtocolError,
 }
 
+macro_rules! conn_ok_with_arg {
+    ($fd:expr, $arg:expr) => {
+        {
+            let _ = write($fd, format!("OK {:?}\n", $arg).as_bytes());
+        }
+    }
+}
+
 macro_rules! conn_ok {
     ($fd:expr) => {
-        let _ = write($fd, "OK\n".as_bytes());
+        conn_ok_with_arg!($fd, 0);
+    }
+}
+
+macro_rules! conn_err {
+    ($fd:expr, $arg:expr) => {
+        {
+            let _ = write($fd, format!("ERR {:?}\n", $arg).as_bytes());
+        }
     }
 }
 
@@ -83,10 +100,14 @@ impl From<&str> for RawQuery {
 fn start_process(conn_fd: RawFd, path: PathBuf, args: Vec<String>) {
     debug!("Starting process {:?} with arguments {:?}", path, args);
 
-    conn_ok!(conn_fd);
+    match Command::new(path).args(args).spawn() {
+        Ok(child) => conn_ok_with_arg!(conn_fd, child.id()),
+        Err(e) => conn_err!(conn_fd, e.raw_os_error().unwrap_or(-1)),
+    }
 }
 
 fn stop_process(conn_fd: RawFd, pid: Pid) {
+    debug!("Stopping process {:?}", pid);
 
     conn_ok!(conn_fd);
 }
@@ -177,8 +198,7 @@ fn handle_connection(conn_fd: RawFd) {
         if let Some(q) = validate_raw_query(query) {
             reply_query(conn_fd, q);
         } else {
-            /* TODO: forward the unix error */
-            let _ = write(conn_fd, "ERR -1\n".as_bytes());
+            conn_err!(conn_fd, -1);
         }
     } else {
         debug!("Failed to receive from socket");
