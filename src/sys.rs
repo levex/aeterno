@@ -41,6 +41,12 @@ enum Query {
     ProtocolError,
 }
 
+macro_rules! conn_ok {
+    ($fd:expr) => {
+        let _ = write($fd, "OK\n".as_bytes());
+    }
+}
+
 impl From<&str> for RawQuery {
     fn from(s: &str) -> RawQuery {
         match s.split_whitespace().collect::<Vec<&str>>().as_slice() {
