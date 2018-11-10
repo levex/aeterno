@@ -5,19 +5,25 @@
  *   - Use helper for everything instead of risking pid 1 to crash
  */
 
+use std::cell::RefCell;
 use std::os::unix::io::RawFd;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::from_utf8;
+use std::sync::Mutex;
 
 extern crate nix;
 use nix::sys::socket::{accept, listen, MsgFlags, recv};
 use nix::sys::signal::kill;
+use nix::sys::wait::waitpid;
 use nix::unistd::{close, Pid, write};
 
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+
+#[macro_use]
+extern crate lazy_static;
 
 // const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
 const SYS_SOCKET_FD: RawFd = 4;
@@ -25,6 +31,11 @@ const SYS_SOCKET_BACKLOG: usize = 5;
 const AETERNO_VERSION: &str = "Aeterno v0.0.1 - November 2018\n";
 
 use std::thread;
+
+lazy_static! {
+    static ref master_fd: Mutex<RefCell<Option<RawFd>>>
+        = Mutex::new(RefCell::new(None));
+}
 
 #[derive(Debug, PartialEq, Eq)]
 enum RawQuery {
@@ -69,6 +80,13 @@ macro_rules! conn_err {
 macro_rules! conn_close {
     ($fd:expr) => {
         {
+            /* Remove master */
+            {
+                let master_cell = master_fd.lock().unwrap();
+                let mut master = master_cell.borrow_mut();
+
+                *master = None;
+            }
             let _ = close($fd);
         }
     }
@@ -202,6 +220,21 @@ fn validate_raw_query(rq: RawQuery) -> Option<Query> {
 
 fn handle_connection(conn_fd: RawFd) {
     debug!("Handling connection for FD {}", conn_fd);
+
+    /* check if we need to 'masterize' this connection */
+    {
+        let master_cell = master_fd.lock().unwrap();
+        let mut master = master_cell.borrow_mut();
+
+        if master.is_none() {
+            /* Yes, this fd becomes the master */
+            *master = Some(conn_fd);
+            info!("Connection FD {:?} became master", conn_fd);
+        }
+
+        /* master is dropped here */
+    }
+
     /* Read in command from the connection */
     loop {
         let buf: &mut [u8] = &mut [0; 256];
@@ -263,5 +296,10 @@ fn main() {
 
     /* The main thread should forever yield */
     loop {
+        let res = waitpid(None, None);
+        match res {
+            Err(_) => (),
+            _ => debug!("wait res: {:?}", res),
+        }
     }
 }

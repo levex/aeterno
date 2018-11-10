@@ -19,3 +19,4 @@ local-testing = []
 nix = "0.11.0"
 log = "0.4.6"
 env_logger = "0.5.13"
+lazy_static = "1.2.0"
