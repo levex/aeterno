@@ -102,31 +102,43 @@ fn parse_raw_query(s: &str) -> Option<(&str, String)> {
     Some((cmd, rest))
 }
 
+macro_rules! no_arg {
+    ($x:expr, $q:expr) => {{
+        if $x == "".to_string() {
+            $q
+        } else {
+            RawQuery::ProtocolError
+        }
+    }}
+}
+
+macro_rules! arg_count_eq {
+    ($x:expr, $c:expr, $q:expr) => {{
+            if $x.split_whitespace().count() == $q {
+                $c
+            } else {
+                RawQuery::ProtocolError
+            }
+    }}
+}
+
+macro_rules! arg_count_ge {
+    ($x:expr, $c:expr, $q:expr) => {{
+            if $x.split_whitespace().count() >= $q {
+                $c
+            } else {
+                RawQuery::ProtocolError
+            }
+    }}
+}
+
 impl From<&str> for RawQuery {
     fn from(s: &str) -> RawQuery {
         match parse_raw_query(s) {
-            Some(("HELO", x)) => {
-                if x == "".to_string() {
-                    RawQuery::Helo
-                } else {
-                    RawQuery::ProtocolError
-                }
-            },
-            Some(("START", x)) => RawQuery::Start(x),
-            Some(("STOP", x)) => {
-                if x.split_whitespace().count() == 1 {
-                    RawQuery::Stop(x)
-                } else {
-                    RawQuery::ProtocolError
-                }
-            },
-            Some(("BYE", x)) => {
-                if x == "".to_string() {
-                    RawQuery::Bye
-                } else {
-                    RawQuery::ProtocolError
-                }
-            },
+            Some(("HELO", x)) => no_arg!(x, RawQuery::Helo),
+            Some(("START", x)) => arg_count_ge!(x, RawQuery::Start(x), 1),
+            Some(("STOP", x)) => arg_count_eq!(x, RawQuery::Stop(x), 1),
+            Some(("BYE", x)) => no_arg!(x, RawQuery::Bye),
             _ => RawQuery::ProtocolError,
         }
     }
