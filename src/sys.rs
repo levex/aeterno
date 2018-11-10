@@ -69,7 +69,7 @@ impl From<&str> for RawQuery {
             },
             Some(("START", x)) => RawQuery::Start(x),
             Some(("STOP", x)) => {
-                if x.split_whitespace().collect::<Vec<_>>().len() == 1 {
+                if x.split_whitespace().count() == 1 {
                     RawQuery::Stop(x)
                 } else {
                     RawQuery::ProtocolError
