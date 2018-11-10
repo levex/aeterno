@@ -36,7 +36,7 @@ enum RawQuery {
 #[derive(Debug, PartialEq, Eq)]
 enum Query {
     Helo,
-    Start(PathBuf),
+    Start(PathBuf, Vec<String>),
     Stop(Pid),
     ProtocolError,
 }
@@ -47,15 +47,48 @@ macro_rules! conn_ok {
     }
 }
 
+fn parse_raw_query(s: &str) -> Option<(&str, String)> {
+    let v: Vec<&str> = s.split_whitespace().collect();
+    let cmd = v.get(0)?;
+    let rest = v.get(1..)
+            .map(|x| x.join(" "))
+            .unwrap_or("".to_string());
+
+    Some((cmd, rest))
+}
+
 impl From<&str> for RawQuery {
     fn from(s: &str) -> RawQuery {
-        match s.split_whitespace().collect::<Vec<&str>>().as_slice() {
-            ["HELO"] => RawQuery::Helo,
-            ["START", x] => RawQuery::Start(x.to_string()),
-            ["STOP", x] => RawQuery::Stop(x.to_string()),
+        match parse_raw_query(s) {
+            Some(("HELO", x)) => {
+                if x == "".to_string() {
+                    RawQuery::Helo
+                } else {
+                    RawQuery::ProtocolError
+                }
+            },
+            Some(("START", x)) => RawQuery::Start(x),
+            Some(("STOP", x)) => {
+                if x.split_whitespace().collect::<Vec<_>>().len() == 1 {
+                    RawQuery::Stop(x)
+                } else {
+                    RawQuery::ProtocolError
+                }
+            },
             _ => RawQuery::ProtocolError,
         }
     }
+}
+
+fn start_process(conn_fd: RawFd, path: PathBuf, args: Vec<String>) {
+    debug!("Starting process {:?} with arguments {:?}", path, args);
+
+    conn_ok!(conn_fd);
+}
+
+fn stop_process(conn_fd: RawFd, pid: Pid) {
+
+    conn_ok!(conn_fd);
 }
 
 fn reply_query(conn_fd: RawFd, q: Query) {
@@ -68,13 +101,17 @@ fn reply_query(conn_fd: RawFd, q: Query) {
              */
             let _ = write(conn_fd, AETERNO_VERSION.as_bytes());
         },
-        Query::Start(path) => {
+        Query::Start(path, args) => {
             info!("Received START {:?} command from fd {:?}",
                   path, conn_fd);
+
+            start_process(conn_fd, path, args);
         },
         Query::Stop(pid) => {
             info!("Received STOP {:?} command from fd {:?}",
                   pid, conn_fd);
+
+            stop_process(conn_fd, pid);
         },
         Query::ProtocolError => {
             info!("Protocol error with fd {:?}", conn_fd);
@@ -89,11 +126,14 @@ fn validate_raw_query(rq: RawQuery) -> Option<Query> {
         RawQuery::ProtocolError => Some(Query::ProtocolError),
         RawQuery::Start(path_str) => {
             let mut p = PathBuf::new();
-            p.push(path_str);
+            let path_exploded = path_str.split_whitespace()
+                .map(str::to_string)
+                .collect::<Vec<String>>();
+            p.push(path_exploded[0].clone());
 
             /* Verify that the path is valid */
             if p.exists() {
-                Some(Query::Start(p))
+                Some(Query::Start(p, path_exploded[1..].into()))
             } else {
                 None
             }
