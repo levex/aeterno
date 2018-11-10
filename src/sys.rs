@@ -29,6 +29,7 @@ use std::thread;
 #[derive(Debug, PartialEq, Eq)]
 enum RawQuery {
     Helo,
+    Bye,
     Start(String),
     Stop(String),
     ProtocolError,
@@ -37,6 +38,7 @@ enum RawQuery {
 #[derive(Debug, PartialEq, Eq)]
 enum Query {
     Helo,
+    Bye,
     Start(PathBuf, Vec<String>),
     Stop(Pid),
     ProtocolError,
@@ -60,6 +62,14 @@ macro_rules! conn_err {
     ($fd:expr, $arg:expr) => {
         {
             let _ = write($fd, format!("ERR {:?}\n", $arg).as_bytes());
+        }
+    }
+}
+
+macro_rules! conn_close {
+    ($fd:expr) => {
+        {
+            let _ = close($fd);
         }
     }
 }
@@ -88,6 +98,13 @@ impl From<&str> for RawQuery {
             Some(("STOP", x)) => {
                 if x.split_whitespace().count() == 1 {
                     RawQuery::Stop(x)
+                } else {
+                    RawQuery::ProtocolError
+                }
+            },
+            Some(("BYE", x)) => {
+                if x == "".to_string() {
+                    RawQuery::Bye
                 } else {
                     RawQuery::ProtocolError
                 }
@@ -137,6 +154,9 @@ fn reply_query(conn_fd: RawFd, q: Query) {
         Query::ProtocolError => {
             info!("Protocol error with fd {:?}", conn_fd);
         },
+        Query::Bye => {
+            conn_close!(conn_fd);
+        },
     }
 }
 
@@ -144,6 +164,7 @@ fn reply_query(conn_fd: RawFd, q: Query) {
 fn validate_raw_query(rq: RawQuery) -> Option<Query> {
     match rq {
         RawQuery::Helo => Some(Query::Helo),
+        RawQuery::Bye => Some(Query::Bye),
         RawQuery::ProtocolError => Some(Query::ProtocolError),
         RawQuery::Start(path_str) => {
             let mut p = PathBuf::new();
@@ -182,29 +203,37 @@ fn validate_raw_query(rq: RawQuery) -> Option<Query> {
 fn handle_connection(conn_fd: RawFd) {
     debug!("Handling connection for FD {}", conn_fd);
     /* Read in command from the connection */
-    let buf: &mut [u8] = &mut [0; 256];
-    let size = recv(conn_fd, buf, MsgFlags::empty());
-    if size.is_ok() {
-        /* The .unwrap() here is OK, since we check is_ok() before */
-        debug!("Received {} bytes", size.unwrap());
-        let query = from_utf8(&buf)
-            .map(|str| { str.trim_matches(char::from(0)) })
-            .map(From::from)
-            .unwrap_or_else(|err| {
-                debug!("{:?}", err);
-                RawQuery::ProtocolError
-            });
+    loop {
+        let buf: &mut [u8] = &mut [0; 256];
+        let size = recv(conn_fd, buf, MsgFlags::empty());
+        if size.is_ok() {
+            /* The .unwrap() here is OK, since we check is_ok() before */
+            let size = size.unwrap();
+            if size == 0 {
+                debug!("Connection terminated with FD {}", conn_fd);
+                conn_close!(conn_fd);
+                break;
+            }
+            debug!("Received {} bytes", size);
+            let query = from_utf8(&buf)
+                .map(|str| { str.trim_matches(char::from(0)) })
+                .map(From::from)
+                .unwrap_or_else(|err| {
+                    debug!("{:?}", err);
+                    RawQuery::ProtocolError
+                });
 
-        if let Some(q) = validate_raw_query(query) {
-            reply_query(conn_fd, q);
+            if let Some(q) = validate_raw_query(query) {
+                reply_query(conn_fd, q);
+            } else {
+                conn_err!(conn_fd, -1);
+            }
         } else {
-            conn_err!(conn_fd, -1);
+            /* TODO: emit error (if there's an error) */
+            // debug!("Failed to receive from socket");
+            break;
         }
-    } else {
-        debug!("Failed to receive from socket");
     }
-
-    let _ = close(conn_fd);
 }
 
 fn socket_listener() {
@@ -233,5 +262,6 @@ fn main() {
     thread::spawn(socket_listener);
 
     /* The main thread should forever yield */
-    loop {}
+    loop {
+    }
 }
