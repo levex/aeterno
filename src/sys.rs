@@ -41,6 +41,7 @@ lazy_static! {
 enum RawQuery {
     Helo,
     Bye,
+    Master,
     Start(String),
     Stop(String),
     ProtocolError,
@@ -50,6 +51,7 @@ enum RawQuery {
 enum Query {
     Helo,
     Bye,
+    Master,
     Start(PathBuf, Vec<String>),
     Stop(Pid),
     ProtocolError,
@@ -136,6 +138,7 @@ impl From<&str> for RawQuery {
     fn from(s: &str) -> RawQuery {
         match parse_raw_query(s) {
             Some(("HELO", x)) => no_arg!(x, RawQuery::Helo),
+            Some(("MASTER", x)) => no_arg!(x, RawQuery::Master),
             Some(("START", x)) => arg_count_ge!(x, RawQuery::Start(x), 1),
             Some(("STOP", x)) => arg_count_eq!(x, RawQuery::Stop(x), 1),
             Some(("BYE", x)) => no_arg!(x, RawQuery::Bye),
@@ -181,6 +184,19 @@ fn reply_query(conn_fd: RawFd, q: Query) {
 
             stop_process(conn_fd, pid);
         },
+        Query::Master => {
+            let master_cell = master_fd.lock().unwrap();
+            let master = master_cell.borrow();
+            let master = master.unwrap();
+
+            if master == conn_fd {
+                info!("Connection {:?} is master\n", conn_fd);
+                conn_ok!(conn_fd);
+            } else {
+                info!("Connection {:?} is NOT master\n", conn_fd);
+                conn_err!(conn_fd, 1);
+            }
+        },
         Query::ProtocolError => {
             info!("Protocol error with fd {:?}", conn_fd);
         },
@@ -195,6 +211,7 @@ fn validate_raw_query(rq: RawQuery) -> Option<Query> {
     match rq {
         RawQuery::Helo => Some(Query::Helo),
         RawQuery::Bye => Some(Query::Bye),
+        RawQuery::Master => Some(Query::Master),
         RawQuery::ProtocolError => Some(Query::ProtocolError),
         RawQuery::Start(path_str) => {
             let mut p = PathBuf::new();
