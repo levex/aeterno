@@ -28,7 +28,7 @@ extern crate lazy_static;
 // const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
 const SYS_SOCKET_FD: RawFd = 4;
 const SYS_SOCKET_BACKLOG: usize = 5;
-const AETERNO_VERSION: &str = "Aeterno v0.0.1 - November 2018\n";
+const AETERNO_VERSION: &str = "Aeterno 0.0.1 - November 2018\n";
 
 use std::thread;
 
@@ -190,10 +190,10 @@ fn reply_query(conn_fd: RawFd, q: Query) {
             let master = master.unwrap();
 
             if master == conn_fd {
-                info!("Connection {:?} is master\n", conn_fd);
+                info!("Connection {:?} is master", conn_fd);
                 conn_ok!(conn_fd);
             } else {
-                info!("Connection {:?} is NOT master\n", conn_fd);
+                info!("Connection {:?} is NOT master", conn_fd);
                 conn_err!(conn_fd, 1);
             }
         },
