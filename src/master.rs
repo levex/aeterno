@@ -18,6 +18,9 @@ use nix::unistd::{read, write};
 
 use std::os::unix::io::RawFd;
 
+#[path = "master_config.rs"]
+pub mod config;
+
 const MASTER_SOCKET_PATH: &str = "/run/aeterno/master.sock";
 const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
 
@@ -177,6 +180,9 @@ fn main() {
             error!("This master instance is not mastering the aeterno sys");
         } else {
             info!("Acquired sys mastering for this instance");
+
+            let c = config::parse_config();
+            debug!("Configuration: {:?}", c);
         }
     } else {
         error!("Invalid response from aeterno-sys");
