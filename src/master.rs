@@ -81,7 +81,7 @@ fn main() {
     /* Bind the socket to the filesystem */
     let master_unix_addr: UnixAddr = UnixAddr::new(MASTER_SOCKET_PATH)
                 .expect("FATAL: Unable to create path for the unix socket");
-    bind(master_fd , &SockAddr::Unix(master_unix_addr))
+    bind(master_fd, &SockAddr::Unix(master_unix_addr))
                 .expect("FATAL: Failed to bind socket to address");
 
     /* Start listening */
