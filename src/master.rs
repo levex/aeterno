@@ -28,6 +28,13 @@ struct SysVersion {
     pub patch: u64,
 }
 
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+enum SysReply {
+    Okay(u64),
+    Error(u64),
+}
+
+/// Read in the version from the aeterno system by executing a HELO command
 fn sys_version(sys_fd: RawFd) -> Result<SysVersion> {
     let buf = &mut [0u8; 128];
 
@@ -67,6 +74,68 @@ fn sys_version(sys_fd: RawFd) -> Result<SysVersion> {
     }
 }
 
+/// Collects a reply from the socket and parses it
+fn sys_reply(sys_fd: RawFd) -> Result<SysReply> {
+    let buf = &mut [0u8; 128];
+
+    read(sys_fd, buf)?;
+
+    /* convert into a string */
+    let converted = std::str::from_utf8(buf)
+        .or(Err(nix::Error::Sys(nix::errno::Errno::EINVAL)))?;
+
+    /* explode the string */
+    let explosion = converted.split(|c| c == ' ' || c == '.' || c == '\n')
+        .collect::<Vec<_>>();
+
+    /* sanity */
+    if explosion.len() < 2 {
+        return Err(nix::Error::Sys(nix::errno::Errno::EINVAL));
+    }
+
+    /* extract the information */
+    let control = explosion[0];
+    let value = explosion[1];
+
+    /* construct the final value */
+    match control {
+        "OK" => {
+            let v = value.parse::<u64>()
+                .or(Err(nix::Error::Sys(nix::errno::Errno::EINVAL)))?;
+            Ok(SysReply::Okay(v))
+        },
+        "ERR" => {
+            let v = value.parse::<u64>()
+                .or(Err(nix::Error::Sys(nix::errno::Errno::EINVAL)))?;
+            Ok(SysReply::Error(v))
+        },
+        _ => {
+            Err(nix::Error::Sys(nix::errno::Errno::EINVAL))
+        }
+    }
+}
+
+/// Asks the sys instance to check whether this connection is a mastering connection
+fn check_mastering(sys_fd: RawFd) -> bool {
+    let r = write(sys_fd, "MASTER\n".as_bytes());
+    if r.is_err() {
+        return false;
+    }
+
+    let reply = sys_reply(sys_fd);
+    if reply.is_err() {
+        return false;
+    }
+
+    /* This unwrap is safe, because of the is_err() check before-hand. */
+    let reply = reply.unwrap();
+
+    match reply {
+        SysReply::Okay(_) => true,
+        _ => false,
+    }
+}
+
 fn main() {
     env_logger::init();
     info!("aeterno-master start up");
@@ -102,6 +171,13 @@ fn main() {
 
     if let Ok(ver) = sys_version(sys_fd) {
         info!("Aeterno Sys Version {:?}", ver);
+
+        let mastering = check_mastering(sys_fd);
+        if !mastering {
+            error!("This master instance is not mastering the aeterno sys");
+        } else {
+            info!("Acquired sys mastering for this instance");
+        }
     } else {
         error!("Invalid response from aeterno-sys");
     }
