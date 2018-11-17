@@ -23,3 +23,7 @@ maintain backwards compatibility for as long *as it makes sense*.
 Similarly, `MIN` and `PAT` refer to minor and patch versions of Aeterno. Each
 minor version bump is a backwards-compatible change with _new_ features, while
 a `PAT` version bump is a backwards compatible bugfix.
+
+## The `START` command
+
+## The `STOP` command
