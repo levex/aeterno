@@ -11,7 +11,7 @@ The most basic command - used to retrieve information about the running
 
 *connection opened by `MASTER` to `SYS`*
 - MASTER -> SYS: `HELO\n`
-- SYS -> MASTER: `Aeterno vMAJ.MIN.PAT - RELMONTH RELYEAR`
+- SYS -> MASTER: `Aeterno MAJ.MIN.PAT - TEXT`
 *connection closed*
 
 ### Explanation of replies
@@ -23,3 +23,5 @@ maintain backwards compatibility for as long *as it makes sense*.
 Similarly, `MIN` and `PAT` refer to minor and patch versions of Aeterno. Each
 minor version bump is a backwards-compatible change with _new_ features, while
 a `PAT` version bump is a backwards compatible bugfix.
+
+Finally, `TEXT` is a blob (i.e., a hostname) identifying the system in question via some user-defined value.
