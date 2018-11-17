@@ -51,6 +51,16 @@ arguments (if any) will become the arguments to the binary started.
 - SYS -> MASTER: `ERR 8`
 *connection closed*
 
+In this example, the first command will result in a process created with
+the executable image being `/bin/echo` and the arguments in “C-Speak” would be:
+
+- `argv[0]` = `/bin/echo`
+- `argv[1]` = `hello`
+- `argv[2]` = `world`
+
+The second `START` command however will not result in a process being created,
+since the underlying `execve(2)` system call returned an error.
+
 ### Explanation of replies
 
 If starting the process failed, the command returns an Error condition, where
