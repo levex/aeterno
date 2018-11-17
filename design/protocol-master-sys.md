@@ -51,7 +51,7 @@ If starting the process succeeded, the command returns with an Ok condition,
 where the value of this is the process identifier (usually the `pid`) of the
 process just started.
 
-### Example:
+### Example
 
 *connection opened by `MASTER` to `SYS`*
 - MASTER -> SYS: `START /bin/echo hello world\n`
@@ -60,3 +60,30 @@ process just started.
 - SYS -> MASTER: `ERR 8`
 *connection closed*
 
+## The `STOP` command
+
+This command is responsible for gracefully stopping a process. When the `sys`
+instance receives this command, it sends an OS-defined signal that is equivalent
+to gracefully stopping the process. On Linux, this is `SIGTERM` as it gives the
+process a chance to clean up. This is in contrast with the `FORCESTOP` command,
+that corresponds to `SIGKILL` and does *not* give the target process a chance
+to clean up.
+
+The `STOP` command takes one pk
+
+### Example
+
+*connection opened by `MASTER` to `SYS`*
+- MASTER -> SYS: `STOP 1234`
+- SYS -> MASTER: `OK 0`
+- MASTER -> SYS: `STOP 0`
+- SYS -> MASTER: `ERR 7`
+*connection closed*
+
+### Explanation of replies
+
+In the example, the first `STOP` command succeeds as shown by receiving an Ok
+condition with value `0`. This is because we assume that the process with
+identifier `1234` exists and the underlying `kill(2)` system call has succeeded.
+
+The second `STOP` command does not succeed, as no process with the identifier `0` exists. In this case, an Error condition is returned, with the value being `7`. Corresponding to `ESRCH / No such process` on the author’s system.
