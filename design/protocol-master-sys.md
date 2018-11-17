@@ -42,15 +42,6 @@ the execution will be passed _directly_ to the OS. Usually, the argument at
 position zero is the actual binary that will be started and the rest of the
 arguments (if any) will become the arguments to the binary started.
 
-If starting the process failed, the command returns an Error condition, where
-the value of the error is the `errno` returned by the underlying system call to
-`execve`. Consult the manual page for `execve(2)` and the corresponding
-`errno.h` for details on why the call failed.
-
-If starting the process succeeded, the command returns with an Ok condition,
-where the value of this is the process identifier (usually the `pid`) of the
-process just started.
-
 ### Example
 
 *connection opened by `MASTER` to `SYS`*
@@ -59,6 +50,17 @@ process just started.
 - MASTER -> SYS: `START /bin/does/not/exist\n`
 - SYS -> MASTER: `ERR 8`
 *connection closed*
+
+### Explanation of replies
+
+If starting the process failed, the command returns an Error condition, where
+the value of the error is the `errno` returned by the underlying system call to
+`execve`. Consult the manual page for `execve(2)` and the corresponding
+`errno.h` for details on why the call failed.
+
+If starting the process succeeded, the command returns with an Ok condition,
+where the value of this is the process identifier (usually the `pid`) of the
+process just started.
 
 ## The `STOP` command
 
