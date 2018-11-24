@@ -7,11 +7,13 @@
  */
 
 #[macro_use]
-extern crate log;
-extern crate env_logger;
+extern crate lazy_static;
+
+extern crate bincode;
 
 #[macro_use]
-extern crate lazy_static;
+extern crate log;
+extern crate env_logger;
 
 extern crate nix;
 use nix::Result;
@@ -24,13 +26,17 @@ extern crate serde_derive;
 extern crate toml;
 
 use std::cell::RefCell;
+use std::os::unix::io::RawFd;
 use std::process::Command;
 use std::sync::Mutex;
-use std::os::unix::io::RawFd;
+use std::thread;
 
 #[path = "master_config.rs"]
 pub mod config;
 use config::MasterConfiguration;
+
+#[path = "master_slave_comm.rs"]
+pub mod slave_comm;
 
 const MASTER_SOCKET_PATH: &str = "/run/aeterno/master.sock";
 const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
@@ -199,9 +205,13 @@ fn main() {
     bind(master_fd, &SockAddr::Unix(master_unix_addr))
                 .expect("FATAL: Failed to bind socket to address");
 
-    /* Start listening */
-    listen(master_fd , 5)
-        .expect("FATAL: cannot listen on the Aeterno socket.");
+    thread::spawn(move || {
+        /* Start listening */
+        listen(master_fd , 5)
+            .expect("FATAL: cannot listen on the Aeterno socket.");
+
+        slave_comm::start_listening(master_fd);
+    });
 
     /* Open the sys socket */
     let sys_fd = socket(AddressFamily::Unix,
