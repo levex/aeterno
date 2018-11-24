@@ -28,6 +28,7 @@ Similarly, `MIN` and `PAT` refer to minor and patch versions of Aeterno. Each
 minor version bump is a backwards-compatible change with _new_ features, while
 a `PAT` version bump is a backwards compatible bugfix.
 
+<<<<<<< HEAD
 Finally, `TEXT` is a blob (i.e., a hostname) identifying the system in question
 via some user-defined value.
 
@@ -98,4 +99,6 @@ In the example, the first `STOP` command succeeds as shown by receiving an Ok
 condition with value `0`. This is because we assume that the process with
 identifier `1234` exists and the underlying `kill(2)` system call has succeeded.
 
-The second `STOP` command does not succeed, as no process with the identifier `0` exists. In this case, an Error condition is returned, with the value being `7`. Corresponding to `ESRCH / No such process` on the author’s system.
+The second `STOP` command does not succeed, as no process with the identifier
+`0` exists. In this case, an Error condition is returned, with the value being
+`7`. Corresponding to `ESRCH / No such process` on the author’s system.

@@ -10,19 +10,40 @@
 extern crate log;
 extern crate env_logger;
 
+#[macro_use]
+extern crate lazy_static;
+
 extern crate nix;
 use nix::Result;
 use nix::sys::socket::{AddressFamily, connect, bind, listen, SockAddr, SockFlag};
 use nix::sys::socket::{SockType, socket, UnixAddr};
 use nix::unistd::{read, write};
 
+#[macro_use]
+extern crate serde_derive;
+extern crate toml;
+
+use std::cell::RefCell;
+use std::process::Command;
+use std::sync::Mutex;
 use std::os::unix::io::RawFd;
 
 #[path = "master_config.rs"]
 pub mod config;
+use config::MasterConfiguration;
 
 const MASTER_SOCKET_PATH: &str = "/run/aeterno/master.sock";
 const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
+
+#[derive(Debug)]
+struct Slave {
+    pub pid: u64,
+}
+
+lazy_static! {
+    static ref slave_registry: Mutex<RefCell<Vec<Slave>>>
+        = Mutex::new(RefCell::new(Vec::new()));
+}
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct SysVersion {
@@ -72,7 +93,7 @@ fn sys_version(sys_fd: RawFd) -> Result<SysVersion> {
             minor,
             patch,
         })
-    } else { 
+    } else {
         Err(nix::Error::Sys(nix::errno::Errno::EBADF))
     }
 }
@@ -139,6 +160,28 @@ fn check_mastering(sys_fd: RawFd) -> bool {
     }
 }
 
+/// Registers a slave that was spawned already.
+fn register_slave(slave_id: u64) {
+    let slave_list = slave_registry.lock().unwrap();
+    let mut slave_list = slave_list.borrow_mut();
+
+    slave_list.push(Slave {
+        pid: slave_id,
+    });
+}
+
+/// Starts the slaves and connects them to this master instance
+fn start_slaves(config: &MasterConfiguration) {
+	for slave in &config.slaves {
+        /* Start the slave */
+        if let Ok(child) = Command::new(slave).spawn() {
+            register_slave(child.id() as u64)
+        } else {
+            error!("failed to start slave {:?}", slave);
+        }
+	}
+}
+
 fn main() {
     env_logger::init();
     info!("aeterno-master start up");
@@ -182,7 +225,14 @@ fn main() {
             info!("Acquired sys mastering for this instance");
 
             let c = config::parse_config();
-            debug!("Configuration: {:?}", c);
+			if c.is_ok() {
+				/* This unwrap is safe because of the is_ok() before */
+				let c = c.unwrap();
+
+				start_slaves(&c);
+			} else {
+				error!("failed to parse the master configuration");
+			}
         }
     } else {
         error!("Invalid response from aeterno-sys");
