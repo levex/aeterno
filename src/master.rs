@@ -247,4 +247,7 @@ fn main() {
     } else {
         error!("Invalid response from aeterno-sys");
     }
+
+    /* loop away */
+    loop {}
 }

@@ -15,6 +15,10 @@ path = "src/sys.rs"
 name = "aeterno-master"
 path = "src/master.rs"
 
+[[bin]]
+name = "aeterno-default-slave"
+path = "src/default_slave.rs"
+
 [features]
 default = []
 local-testing = []

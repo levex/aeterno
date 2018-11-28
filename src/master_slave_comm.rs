@@ -7,14 +7,16 @@ use nix::unistd::{close, write};
 use std::os::unix::io::RawFd;
 use std::thread;
 
+/* TODO: move to master_slave_shared.rs */
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-enum Request {
+pub enum Request {
     Helo,
     ProtocolError,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-enum Reply {
+pub enum Reply {
     Helo(String),
 }
 
