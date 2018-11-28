@@ -44,12 +44,16 @@ fn get_reply(fd: RawFd) -> Result<Reply> {
         })
 }
 
+fn send_and_receive(fd: RawFd, req: Request) -> Result<Reply> {
+    send_request(fd, req)
+        .and_then(|_| { get_reply(fd) })
+}
+
 fn handle_connection(fd: RawFd) -> bool {
     /* Send a helo */
-    let r = send_request(fd, Request::Helo);
-    let reply = get_reply(fd);
+    let reply = send_and_receive(fd, Request::Helo);
 
-    debug!("r = {:?}, reply = {:?}", r, reply);
+    debug!("reply = {:?}", reply);
 
     true
 }
