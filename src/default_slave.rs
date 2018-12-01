@@ -12,11 +12,20 @@ use nix::sys::socket::{AddressFamily, connect, MsgFlags, SockAddr, SockFlag};
 use nix::sys::socket::{SockType, socket, UnixAddr, recv};
 use nix::unistd::{close, write};
 use std::os::unix::io::RawFd;
+use std::path::PathBuf;
 
 #[macro_use]
 extern crate serde_derive;
 
 const MASTER_SOCKET_PATH: &str = "/run/aeterno/master.sock";
+
+#[cfg(feature = "native")]
+const SLAVE_SERVICES: &str = "/usr/local/aeterno/services/";
+
+#[cfg(feature = "default")]
+const SLAVE_SERVICES: &str = "./samples/services/";
+
+/* ------------- >% ------------ */
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Request {
@@ -27,6 +36,15 @@ pub enum Request {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Reply {
     Helo(String),
+}
+
+/* ------------- %< ------------ */
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+struct Unit {
+    pub name: String,
+    pub exec_start: String,
 }
 
 fn send_request(fd: RawFd, req: Request) -> Result<usize> {
@@ -51,11 +69,52 @@ fn send_and_receive(fd: RawFd, req: Request) -> Result<Reply> {
 
 fn handle_connection(fd: RawFd) -> bool {
     /* Send a helo */
-    let reply = send_and_receive(fd, Request::Helo);
+    match send_and_receive(fd, Request::Helo) {
+        Ok(Reply::Helo(reply)) => info!("Counterpart version: {}", reply),
+        a => error!("failed to get counterpart version! {:?}", a),
+    }
 
-    debug!("reply = {:?}", reply);
+    let units = enumerate_units();
 
     true
+}
+
+fn load_unit_at(path: &PathBuf) -> Result<Unit> {
+    let contents = std::fs::read_to_string(path);
+    if contents.is_err() {
+        debug!("load_unit_at: failed to read_to_string: {:?}", contents);
+        return Err(nix::Error::from_errno(nix::errno::Errno::EINVAL));
+    }
+    let contents = contents.unwrap();
+    let unit = toml::from_str(&contents);
+    if unit.is_ok() {
+        let unit = unit.unwrap();
+        debug!("loaded unit {:?}", unit);
+        return Ok(unit);
+    } else {
+        debug!("load_unit_at: failed to from_str: {:?}", unit);
+        return Err(nix::Error::from_errno(nix::errno::Errno::EINVAL));
+    }
+}
+
+fn enumerate_units() -> Result<Vec<Unit>> {
+    let paths = std::fs::read_dir(SLAVE_SERVICES);
+    let mut units = Vec::new();
+    if paths.is_ok() {
+        for path in paths.unwrap() {
+            let path = path.unwrap();
+            info!("Loading service {}", path.path().display());
+            let unit = load_unit_at(&path.path());
+            if unit.is_ok() {
+                units.push(unit);
+            } else {
+                warn!("failed to load service {}: {:?}",
+                      path.path().display(), unit);
+            }
+        }
+    }
+
+    Err(nix::Error::from_errno(nix::errno::Errno::ENOENT))
 }
 
 fn main() {
