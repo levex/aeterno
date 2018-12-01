@@ -38,6 +38,9 @@ use config::MasterConfiguration;
 #[path = "master_slave_comm.rs"]
 pub mod slave_comm;
 
+#[path = "master_slave_shared.rs"]
+mod shared;
+
 const MASTER_SOCKET_PATH: &str = "/run/aeterno/master.sock";
 const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
 

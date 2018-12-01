@@ -7,18 +7,10 @@ use nix::unistd::{close, write};
 use std::os::unix::io::RawFd;
 use std::thread;
 
-/* TODO: move to master_slave_shared.rs */
+#[path = "master_slave_shared.rs"]
+mod shared;
+use shared::{Request, Reply};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum Request {
-    Helo,
-    ProtocolError,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum Reply {
-    Helo(String),
-}
 
 fn handle_helo(conn_fd: RawFd) -> bool {
     let helo = Reply::Helo("aeterno-master 0.0.1 - November 2018".to_string());

@@ -25,20 +25,9 @@ const SLAVE_SERVICES: &str = "/usr/local/aeterno/services/";
 #[cfg(feature = "default")]
 const SLAVE_SERVICES: &str = "./samples/services/";
 
-/* ------------- >% ------------ */
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum Request {
-    Helo,
-    ProtocolError,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum Reply {
-    Helo(String),
-}
-
-/* ------------- %< ------------ */
+#[path = "master_slave_shared.rs"]
+mod shared;
+use shared::{Request, Reply};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
