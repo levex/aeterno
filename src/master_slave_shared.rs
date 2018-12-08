@@ -5,6 +5,7 @@ use uuid::Uuid;
 pub enum Request {
     Helo,
     RegisterUnit,
+    UnitStartExecutable(Uuid, String),
     ProtocolError,
 }
 

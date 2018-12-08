@@ -71,6 +71,38 @@ fn register_unit(fd: RawFd, unit: &mut Unit) {
     }
 }
 
+/// Construct the order of units to be started.
+///
+/// Currently, it's just a dummy we don't handle dependenices.
+fn construct_startup_plan(units: &Vec<Unit>) -> Option<Vec<&Unit>> {
+    let mut ret = Vec::new();
+    for i in units {
+        ret.push(i);
+    }
+
+    Some(ret)
+}
+
+/// Starts a unit, by adding the executable and asking the master to start it
+///
+/// Note that, whether the unit has "successfully" started is not checked before
+/// the listening loop is started later in the startup procedure.
+fn startup_unit(conn_fd: RawFd, unit: &Unit) {
+    let _ = send_request(conn_fd, Request::UnitStartExecutable(
+        unit.uuid,
+        unit.exec_start.clone(),
+    ));
+}
+
+/// Executes a startup plan, submitting requests to `conn_fd`.
+fn execute_plan(conn_fd: RawFd, unit_order: Vec<&Unit>) -> bool {
+    for unit in unit_order {
+        startup_unit(conn_fd, unit);
+    }
+
+    true
+}
+
 fn handle_connection(fd: RawFd) -> bool {
     /* Send a helo */
     match send_and_receive(fd, Request::Helo) {
@@ -78,12 +110,16 @@ fn handle_connection(fd: RawFd) -> bool {
         a => error!("failed to get counterpart version! {:?}", a),
     }
 
-    let units = enumerate_units().unwrap_or(Vec::new());
-    for mut unit in units {
+    let mut units = enumerate_units().unwrap_or(Vec::new());
+    for mut unit in &mut units {
         register_unit(fd, &mut unit);
     }
 
-    true
+    /* units are now registered, time to start them up */
+    match construct_startup_plan(&units) {
+        Some(plan) => execute_plan(fd, plan),
+        _ => false,
+    }
 }
 
 fn load_unit_at(path: &PathBuf) -> Result<Unit> {
@@ -143,7 +179,7 @@ fn main() {
         .expect("FATAL: Failed to connect to master socket");
 
     let r = handle_connection(master_fd);
-    if r {
+    if r == false {
         let _ = close(master_fd);
     } else {
         /* TODO: reconnect? */

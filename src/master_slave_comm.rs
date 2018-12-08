@@ -32,15 +32,27 @@ fn handle_register_unit(conn_fd: RawFd) -> bool {
     false
 }
 
-fn handle_request(conn_fd: RawFd, req: Request) -> bool {
+fn handle_unit_start_executable(sys_fd: RawFd, conn_fd: RawFd, uuid: Uuid,
+                                execstr: String) -> bool {
+    debug!("Handling Start request for fd {} uuid {} execstr \"{}\"", 
+           conn_fd, uuid, execstr);
+
+    let _ = write(sys_fd, format!("START {}", execstr).as_bytes());
+
+    false
+}
+
+fn handle_request(sys_fd: RawFd, conn_fd: RawFd, req: Request) -> bool {
     match req {
         Request::Helo => handle_helo(conn_fd),
         Request::RegisterUnit => handle_register_unit(conn_fd),
+        Request::UnitStartExecutable(uuid, execstr)
+            => handle_unit_start_executable(sys_fd, conn_fd, uuid, execstr),
         _ => true,
     }
 }
 
-fn handle_connection(conn_fd: RawFd) {
+fn handle_connection(sys_fd: RawFd, conn_fd: RawFd) {
     let buf: &mut [u8] = &mut [0; 256];
 
     loop {
@@ -48,7 +60,7 @@ fn handle_connection(conn_fd: RawFd) {
         if size.is_ok() && size.unwrap() > 0 {
             let msg: Request = deserialize(buf)
                 .unwrap_or(Request::ProtocolError);
-            let should_close = handle_request(conn_fd, msg);
+            let should_close = handle_request(sys_fd, conn_fd, msg);
             if should_close {
                 let _ = close(conn_fd);
                 break;
@@ -61,12 +73,12 @@ fn handle_connection(conn_fd: RawFd) {
 ///
 /// Assumes that listening has already been setup by the caller.
 #[allow(dead_code)]
-pub fn start_listening(fd: RawFd) {
+pub fn start_listening(sys_fd: RawFd, fd: RawFd) {
     loop {
         if let Ok(conn_fd) = accept(fd) {
             debug!("Accepted a connection with FD {}", conn_fd);
             thread::spawn(move || {
-                handle_connection(conn_fd);
+                handle_connection(sys_fd, conn_fd);
             });
         }
     }

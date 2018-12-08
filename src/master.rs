@@ -233,20 +233,20 @@ fn main() {
     bind(master_fd, &SockAddr::Unix(master_unix_addr))
                 .expect("FATAL: Failed to bind socket to address");
 
-    thread::spawn(move || {
-        /* Start listening */
-        listen(master_fd , 5)
-            .expect("FATAL: cannot listen on the Aeterno socket.");
-
-        slave_comm::start_listening(master_fd);
-    });
-
     /* Open the sys socket */
     let sys_fd = socket(AddressFamily::Unix,
                         SockType::Stream,
                         SockFlag::empty(),
                         None)
         .expect("FATAL: failed to create sys socket counterpair");
+
+    thread::spawn(move || {
+        /* Start listening */
+        listen(master_fd , 5)
+            .expect("FATAL: cannot listen on the Aeterno socket.");
+
+        slave_comm::start_listening(sys_fd, master_fd);
+    });
 
     let sys_unix_addr: UnixAddr = UnixAddr::new(SYS_SOCKET_PATH)
                 .expect("FATAL: Unable to create path for the unix socket");
