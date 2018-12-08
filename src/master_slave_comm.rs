@@ -45,7 +45,7 @@ fn handle_connection(conn_fd: RawFd) {
 
     loop {
         let size = recv(conn_fd, buf, MsgFlags::empty());
-        if size.is_ok() {
+        if size.is_ok() && size.unwrap() > 0 {
             let msg: Request = deserialize(buf)
                 .unwrap_or(Request::ProtocolError);
             let should_close = handle_request(conn_fd, msg);
