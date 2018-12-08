@@ -17,6 +17,9 @@ use std::path::PathBuf;
 #[macro_use]
 extern crate serde_derive;
 
+extern crate uuid;
+use uuid::Uuid;
+
 const MASTER_SOCKET_PATH: &str = "/run/aeterno/master.sock";
 
 #[cfg(feature = "native")]
@@ -25,15 +28,17 @@ const SLAVE_SERVICES: &str = "/usr/local/aeterno/services/";
 #[cfg(feature = "default")]
 const SLAVE_SERVICES: &str = "./samples/services/";
 
-#[path = "master_slave_shared.rs"]
-mod shared;
-use shared::{Request, Reply};
+mod master_slave_shared;
+pub use master_slave_shared::*;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 struct Unit {
     pub name: String,
     pub exec_start: String,
+
+    #[serde(skip)]
+    pub uuid: Uuid,
 }
 
 fn send_request(fd: RawFd, req: Request) -> Result<usize> {
@@ -56,6 +61,16 @@ fn send_and_receive(fd: RawFd, req: Request) -> Result<Reply> {
         .and_then(|_| { get_reply(fd) })
 }
 
+fn register_unit(fd: RawFd, unit: &mut Unit) {
+    match send_and_receive(fd, Request::RegisterUnit) {
+        Ok(Reply::UnitRegistered(reply)) => { 
+            info!("Registered unit: {}", reply);
+            unit.uuid = reply;
+        },
+        a => error!("failed to register a unit! {:?}", a),
+    }
+}
+
 fn handle_connection(fd: RawFd) -> bool {
     /* Send a helo */
     match send_and_receive(fd, Request::Helo) {
@@ -63,7 +78,10 @@ fn handle_connection(fd: RawFd) -> bool {
         a => error!("failed to get counterpart version! {:?}", a),
     }
 
-    let units = enumerate_units();
+    let units = enumerate_units().unwrap_or(Vec::new());
+    for mut unit in units {
+        register_unit(fd, &mut unit);
+    }
 
     true
 }
@@ -88,19 +106,21 @@ fn load_unit_at(path: &PathBuf) -> Result<Unit> {
 
 fn enumerate_units() -> Result<Vec<Unit>> {
     let paths = std::fs::read_dir(SLAVE_SERVICES);
-    let mut units = Vec::new();
+    let mut units: Vec<Unit> = Vec::new();
     if paths.is_ok() {
         for path in paths.unwrap() {
             let path = path.unwrap();
             info!("Loading service {}", path.path().display());
             let unit = load_unit_at(&path.path());
             if unit.is_ok() {
-                units.push(unit);
+                units.push(unit.unwrap());
             } else {
                 warn!("failed to load service {}: {:?}",
                       path.path().display(), unit);
             }
         }
+
+        return Ok(units);
     }
 
     Err(nix::Error::from_errno(nix::errno::Errno::ENOENT))
@@ -124,7 +144,7 @@ fn main() {
 
     let r = handle_connection(master_fd);
     if r {
-        close(master_fd);
+        let _ = close(master_fd);
     } else {
         /* TODO: reconnect? */
     }

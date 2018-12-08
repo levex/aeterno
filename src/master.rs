@@ -23,6 +23,7 @@ use nix::unistd::{read, write};
 
 #[macro_use]
 extern crate serde_derive;
+extern crate serde;
 extern crate toml;
 
 use std::cell::RefCell;
@@ -35,11 +36,14 @@ use std::thread;
 pub mod config;
 use config::MasterConfiguration;
 
+extern crate uuid;
+use uuid::Uuid;
+
+mod master_slave_shared;
+pub use master_slave_shared::*;
+
 #[path = "master_slave_comm.rs"]
 pub mod slave_comm;
-
-#[path = "master_slave_shared.rs"]
-mod shared;
 
 const MASTER_SOCKET_PATH: &str = "/run/aeterno/master.sock";
 const SYS_SOCKET_PATH: &str = "/run/aeterno/sys.sock";
@@ -49,8 +53,19 @@ struct Slave {
     pub pid: u64,
 }
 
+#[derive(Debug)]
+struct Unit {
+    pub conn_fd: RawFd,
+    pub uuid: Uuid,
+}
+
 lazy_static! {
     static ref slave_registry: Mutex<RefCell<Vec<Slave>>>
+        = Mutex::new(RefCell::new(Vec::new()));
+}
+
+lazy_static! {
+    static ref unit_registry: Mutex<RefCell<Vec<Unit>>>
         = Mutex::new(RefCell::new(Vec::new()));
 }
 
@@ -189,6 +204,16 @@ fn start_slaves(config: &MasterConfiguration) {
             error!("failed to start slave {:?}", slave);
         }
 	}
+}
+
+pub fn register_unit(conn_fd: RawFd, uuid: Uuid) {
+    let unit_list = unit_registry.lock().unwrap();
+    let mut unit_list = unit_list.borrow_mut();
+
+    unit_list.push(Unit{
+        conn_fd,
+        uuid,
+    });
 }
 
 fn main() {
