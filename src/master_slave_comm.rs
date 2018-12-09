@@ -4,6 +4,7 @@ use bincode::{deserialize, serialize};
 use nix::sys::socket::{accept, MsgFlags, recv};
 use nix::unistd::{close, write};
 
+use std::str::from_utf8;
 use std::os::unix::io::RawFd;
 use std::thread;
 
@@ -38,6 +39,40 @@ fn handle_unit_start_executable(sys_fd: RawFd, conn_fd: RawFd, uuid: Uuid,
            conn_fd, uuid, execstr);
 
     let _ = write(sys_fd, format!("START {}", execstr).as_bytes());
+
+    /* We should now receive either `ERR XX` or `OK XX`,
+     * where in the case of `ERR`, `XX` is the errno from the execve(2) call.
+     *
+     * In the case of `OK`, the `XX` is the PID of the process created.
+     */
+    let buf: &mut [u8] = &mut [0; 256];
+    let res = recv(sys_fd, buf, MsgFlags::empty())
+        .and_then(|_| {
+            let q = from_utf8(&buf)
+                .map(|str| { str.trim_matches(char::from(0)) })
+                .unwrap_or("ERR -1")
+                .to_string();
+            let qs = q.split_whitespace().collect::<Vec<_>>();
+
+            if qs.len() < 2 {
+                Err(nix::Error::Sys(nix::errno::Errno::EINVAL))
+            } else {
+                let st = qs.get(0).unwrap();
+                let ft = qs.get(1).unwrap();
+                match st {
+                    &"OK" => Ok(ft.parse::<i32>().unwrap_or(0)),
+                    &"ERR" => Err(
+                        nix::Error::Sys(nix::errno::from_i32(ft.parse::<i32>().unwrap_or(-1)))
+                    ),
+                    &_ => Err(nix::Error::Sys(nix::errno::Errno::EINVAL)),
+                }
+            }
+        });
+
+    match res {
+        Ok(pid) => info!("spawned process with pid {}", pid),
+        Err(e) => info!("failed to spawn process {:?}", e),
+    }
 
     false
 }

@@ -256,6 +256,7 @@ fn process_wait_event(wait: WaitStatus) {
     } else {
         let master = master.unwrap();
         let _ = write(master, format!("{:?}\n", wait).as_bytes());
+        debug!("processed wait event {:?}", wait);
     }
 }
 
